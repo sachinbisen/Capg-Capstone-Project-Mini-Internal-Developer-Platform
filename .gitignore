@@ -1,0 +1,22 @@
+# Node.js dependencies
+node_modules/
+
+# Terraform working directory and state files
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Environment variable files
+.env
+.env.*
+
+# Application and system logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# macOS metadata
+.DS_Store

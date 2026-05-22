@@ -1,0 +1,77 @@
+name: Mini IDP Deploy Pipeline
+
+on:
+  # Run automatically on pushes to the main branch.
+  push:
+    branches:
+      - main
+
+  # Allow manual pipeline execution from GitHub Actions UI.
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    name: Build, Push, and Deploy
+    runs-on: ubuntu-latest
+
+    # Shared environment values used by multiple workflow steps.
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/mini-idp:${{ github.sha }}
+
+    steps:
+      # Checkout repository source code for the runner.
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # Install Node.js runtime to manage application dependencies.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Install app dependencies before building Docker image.
+      - name: Install dependencies
+        working-directory: app
+        run: npm install
+
+      # Build the Docker image for this commit.
+      - name: Build Docker image
+        working-directory: app
+        run: docker build -t "$DOCKER_IMAGE" .
+
+      # Authenticate to Docker Hub using repository secrets.
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Push commit-tagged image so infrastructure can deploy immutable version.
+      - name: Push Docker image
+        run: docker push "$DOCKER_IMAGE"
+
+      # Install Terraform CLI on the runner.
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # Initialize Terraform backend and provider plugins.
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      # Validate Terraform syntax and configuration.
+      - name: Terraform Validate
+        working-directory: terraform
+        run: terraform validate
+
+      # Apply infrastructure and deployment changes.
+      - name: Terraform Apply
+        working-directory: terraform
+        env:
+          TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+          TF_VAR_ami_id: ${{ secrets.AMI_ID }}
+          TF_VAR_docker_image: ${{ env.DOCKER_IMAGE }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: terraform apply -auto-approve
