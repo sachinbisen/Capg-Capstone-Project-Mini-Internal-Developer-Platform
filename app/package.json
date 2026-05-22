@@ -1,14 +1,22 @@
 {
   "name": "mini-internal-developer-platform-app",
   "version": "1.0.0",
-  "description": "Sample Node.js application deployed by the mini internal developer platform.",
-  "_comment": "JSON does not support native comments, so this metadata key documents file intent.",
+  "description": "Beginner-friendly Express service for the Platform Engineering Capstone project.",
+  "_comment": "JSON does not support inline comments, so _comment is used for guidance.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node -e \"console.log('No automated tests configured yet')\""
+    "test": "node -e \"console.log('No automated tests configured yet. Add tests as a next step.')\""
   },
+  "keywords": [
+    "platform-engineering",
+    "express",
+    "nodejs",
+    "capstone"
+  ],
+  "author": "Capstone Project",
+  "license": "MIT",
   "dependencies": {
     "express": "^4.19.2"
   }
