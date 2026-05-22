@@ -38,7 +38,7 @@ variable "public_subnet_cidr" {
 variable "instance_type" {
   description = "EC2 instance type (Free Tier-friendly default is t2.micro)."
   type        = string
-  default     = "t2.micro"
+  default     = "t3.micro"
 }
 
 # Optional SSH key pair for secure instance access.
