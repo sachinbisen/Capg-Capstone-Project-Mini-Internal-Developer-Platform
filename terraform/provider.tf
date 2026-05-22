@@ -1,4 +1,5 @@
-# Define Terraform and provider version requirements.
+# Define Terraform and AWS provider version requirements.
+# Keeping versions explicit makes project behavior more predictable for beginners.
 terraform {
   required_version = ">= 1.6.0"
 
@@ -10,7 +11,7 @@ terraform {
   }
 }
 
-# Configure the AWS provider region for all infrastructure resources.
+# Configure AWS provider using a variable-driven region.
 provider "aws" {
   region = var.aws_region
 }

@@ -12,6 +12,13 @@ variable "project_name" {
   default     = "mini-idp"
 }
 
+# Environment name used in tags for easier filtering in AWS console.
+variable "environment" {
+  description = "Environment tag (for example: dev, stage, prod)."
+  type        = string
+  default     = "dev"
+}
+
 # CIDR block for the primary VPC.
 variable "vpc_cidr" {
   description = "CIDR block for the VPC."
@@ -26,25 +33,12 @@ variable "public_subnet_cidr" {
   default     = "10.0.1.0/24"
 }
 
-# Availability Zone used for the public subnet.
-variable "availability_zone" {
-  description = "Availability Zone for subnet creation."
-  type        = string
-  default     = "ap-south-1a"
-}
 
 # EC2 instance size for the application host.
 variable "instance_type" {
-  description = "EC2 instance type."
+  description = "EC2 instance type (Free Tier-friendly default is t2.micro)."
   type        = string
-  default     = "t3.micro"
-}
-
-# Base AMI ID for EC2 instance creation.
-variable "ami_id" {
-  description = "AMI ID for the EC2 instance. Replace with a valid AMI for your region."
-  type        = string
-  default     = "ami-xxxxxxxxxxxxxxxxx"
+  default     = "t2.micro"
 }
 
 # Optional SSH key pair for secure instance access.
@@ -56,9 +50,9 @@ variable "key_pair_name" {
 
 # Docker image reference used by EC2 user data during deployment.
 variable "docker_image" {
-  description = "Docker image URL (for example, username/mini-idp:tag)."
+  description = "Docker image URL used by EC2 bootstrap (Docker Hub image)."
   type        = string
-  default     = "your-dockerhub-username/mini-idp:latest"
+  default     = "260104/mini-idp-app:latest"
 }
 
 # Restrict SSH access to a trusted CIDR range when possible.
