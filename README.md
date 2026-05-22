@@ -30,7 +30,7 @@ Developer Push
 ### Architecture Components
 - **Developer Push**: Code updates are pushed to the main branch.
 - **GitHub Actions**: Executes CI/CD automation for build and deployment.
-- **Terraform Provisioning**: Creates/updates AWS networking, EC2, and monitoring resources.
+- **Terraform Provisioning**: Creates/updates AWS networking, EC2, and monitoring  resources.
 - **Docker Build**: Packages the Node.js app into a portable container image.
 - **Docker Hub Push**: Stores versioned container images in a registry.
 - **EC2 Auto Deployment**: Pulls and runs the latest image on an EC2 host.
