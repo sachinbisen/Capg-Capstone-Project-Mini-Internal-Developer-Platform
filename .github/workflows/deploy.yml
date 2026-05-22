@@ -1,77 +1,121 @@
 name: Mini IDP Deploy Pipeline
 
 on:
-  # Run automatically on pushes to the main branch.
+  # Automatic deployment trigger whenever code is pushed to main.
   push:
     branches:
       - main
-
-  # Allow manual pipeline execution from GitHub Actions UI.
+  # Manual trigger for on-demand deployments from GitHub Actions UI.
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  deploy:
     name: Build, Push, and Deploy
     runs-on: ubuntu-latest
-
-    # Shared environment values used by multiple workflow steps.
+    permissions:
+      contents: read
     env:
+      IMAGE_NAME: 260104/mini-idp-app:latest
+      TF_IN_AUTOMATION: "true"
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/mini-idp:${{ github.sha }}
+      TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+      TF_VAR_docker_image: 260104/mini-idp-app:latest
 
     steps:
-      # Checkout repository source code for the runner.
-      - name: Checkout source
+      # Stage 1: checkout repository source so workflow can access app + terraform code.
+      - name: Stage 1 - Checkout repository
         uses: actions/checkout@v4
 
-      # Install Node.js runtime to manage application dependencies.
-      - name: Setup Node.js
+      # Stage 2: setup Node.js runtime and install app dependencies.
+      - name: Stage 2 - Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
 
-      # Install app dependencies before building Docker image.
-      - name: Install dependencies
+      - name: Stage 2 - Install dependencies
         working-directory: app
-        run: npm install
+        run: |
+          set -euo pipefail
+          echo "Installing Node.js dependencies..."
+          npm ci
 
-      # Build the Docker image for this commit.
-      - name: Build Docker image
-        working-directory: app
-        run: docker build -t "$DOCKER_IMAGE" .
+      # Stage 3: build Docker image that will be deployed on EC2 by Terraform user_data.
+      - name: Stage 3 - Build Docker image
+        run: |
+          set -euo pipefail
+          echo "Building Docker image: ${IMAGE_NAME}"
+          docker build -t "${IMAGE_NAME}" ./app
+          docker image ls "${IMAGE_NAME}"
 
-      # Authenticate to Docker Hub using repository secrets.
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # Push commit-tagged image so infrastructure can deploy immutable version.
-      - name: Push Docker image
-        run: docker push "$DOCKER_IMAGE"
-
-      # Install Terraform CLI on the runner.
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      # Initialize Terraform backend and provider plugins.
-      - name: Terraform Init
-        working-directory: terraform
-        run: terraform init
-
-      # Validate Terraform syntax and configuration.
-      - name: Terraform Validate
-        working-directory: terraform
-        run: terraform validate
-
-      # Apply infrastructure and deployment changes.
-      - name: Terraform Apply
-        working-directory: terraform
+      # Stage 4: login to Docker Hub using GitHub encrypted secrets.
+      - name: Stage 4 - Login to Docker Hub
+        run: |
+          set -euo pipefail
+          echo "Logging in to Docker Hub as ${DOCKER_USERNAME}..."
+          echo "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USERNAME}" --password-stdin
         env:
-          TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
-          TF_VAR_ami_id: ${{ secrets.AMI_ID }}
-          TF_VAR_docker_image: ${{ env.DOCKER_IMAGE }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: terraform apply -auto-approve
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Stage 5: push the latest image so new EC2 instances can pull it during bootstrap.
+      - name: Stage 5 - Push Docker image
+        run: |
+          set -euo pipefail
+          echo "Pushing Docker image: ${IMAGE_NAME}"
+          docker push "${IMAGE_NAME}"
+
+      # Stage 6: setup Terraform CLI used for infrastructure provisioning.
+      - name: Stage 6 - Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      # Stage 7: initialize Terraform in terraform folder.
+      - name: Stage 7 - Terraform init
+        working-directory: terraform
+        run: |
+          set -euo pipefail
+          echo "Initializing Terraform..."
+          terraform init -input=false
+
+      # Stage 8: validate Terraform config and fail fast with clear logs if invalid.
+      - name: Stage 8 - Terraform validate
+        working-directory: terraform
+        run: |
+          set -euo pipefail
+          echo "Validating Terraform configuration..."
+          terraform validate
+
+      # Stage 9: taint EC2 instance to enforce immutable deployment (destroy old, create new).
+      # On first deployment, no instance exists yet in state, so taint is skipped gracefully.
+      - name: Stage 9 - Terraform taint EC2
+        working-directory: terraform
+        run: |
+          set -euo pipefail
+          echo "Checking Terraform state for existing EC2 instance..."
+          if terraform state list | grep -q '^aws_instance.app_server$'; then
+            echo "Existing EC2 found. Marking for replacement (immutable deployment)..."
+            terraform taint aws_instance.app_server
+          else
+            echo "No existing EC2 in state (likely first deploy). Skipping taint stage safely."
+          fi
+
+      # Stage 10: apply infrastructure changes automatically and show plan in logs.
+      - name: Stage 10 - Terraform apply
+        working-directory: terraform
+        run: |
+          set -euo pipefail
+          echo "Applying Terraform changes..."
+          terraform plan -input=false -out=tfplan
+          terraform apply -input=false -auto-approve tfplan
+
+      # Helpful failure output so beginners can quickly identify what to inspect.
+      - name: Deployment failure guidance
+        if: failure()
+        run: |
+          echo "Deployment failed. Check logs for the failed stage above (Docker or Terraform)."
+          echo "Also verify GitHub Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, DOCKER_USERNAME, DOCKER_PASSWORD."

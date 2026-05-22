@@ -1,106 +1,193 @@
 # Mini Internal Developer Platform
-This repository contains a beginner-friendly Platform Engineering capstone project that demonstrates how to build a mini Internal Developer Platform (IDP) using GitHub Actions, Terraform, Docker, and AWS.
+[![Mini IDP Deploy Pipeline](https://github.com/sachinbisen/Capg-Capstone-Project-Mini-Internal-Developer-Platform/actions/workflows/deploy.yml/badge.svg)](https://github.com/sachinbisen/Capg-Capstone-Project-Mini-Internal-Developer-Platform/actions/workflows/deploy.yml)
+This capstone project demonstrates a beginner-friendly Platform Engineering setup where Terraform provisions AWS infrastructure, EC2 bootstraps Docker automatically, and CloudWatch provides basic runtime monitoring.
 
-## Project Objective
-The objective of this project is to design a simple but professional end-to-end platform workflow where:
-- developers ship application updates quickly,
-- infrastructure is provisioned through Infrastructure as Code (IaC),
-- deployments are automated through CI/CD,
-- and operational visibility is enabled through monitoring.
+## CI/CD Architecture
+The automated deployment pipeline follows this flow:
 
-## Platform Engineering Concept
-Platform Engineering focuses on building reusable internal platforms that improve developer experience and delivery speed. In this capstone, the "platform" provides:
-- standardized deployment automation,
-- self-service style infrastructure provisioning,
-- consistent containerized packaging,
-- and observability hooks for runtime monitoring.
+Developer Push  
+→ GitHub Actions (`deploy.yml`)  
+→ Node.js Dependency Install  
+→ Docker Build (`260104/mini-idp-app:latest`)  
+→ Docker Hub Push  
+→ Terraform Init + Validate  
+→ Terraform Taint EC2  
+→ Terraform Apply  
+→ Old EC2 Replaced + New EC2 Bootstrapped  
+→ Latest Docker Image Deployed
 
-## Project Architecture
-The mini IDP combines source control, CI/CD, infrastructure provisioning, containerization, and cloud monitoring into one workflow.
+## GitHub Actions Workflow Explanation
+The `.github/workflows/deploy.yml` pipeline runs in 10 beginner-friendly stages:
+1. Checkout repository
+2. Setup Node.js and install dependencies
+3. Build Docker image `260104/mini-idp-app:latest`
+4. Login to Docker Hub using secrets
+5. Push image to Docker Hub
+6. Setup Terraform
+7. Run `terraform init`
+8. Run `terraform validate`
+9. Run `terraform taint aws_instance.app_server` (when instance exists)
+10. Run `terraform apply -auto-approve`
 
-### End-to-End Architecture Flow
+Triggers:
+- Automatic on push to `main`
+- Manual from GitHub Actions using `workflow_dispatch`
+
+## GitHub Secrets Used
+Configure these repository secrets before running the pipeline:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION`
+- `DOCKER_USERNAME`
+- `DOCKER_PASSWORD`
+
+These are consumed by the workflow so credentials are not hardcoded in code.
+
+## Automated Deployment Explanation
+After each push to `main`, the workflow automatically:
+1. Builds and pushes the latest Docker image.
+2. Validates infrastructure code.
+3. Recreates EC2 (immutable style when state has existing instance).
+4. Applies Terraform and provisions the updated infrastructure.
+5. Lets EC2 user-data pull and run `260104/mini-idp-app:latest`.
+
+If any stage fails, the workflow stops immediately and logs the failed step clearly.
+
+## Infrastructure Architecture
+The infrastructure pipeline follows this flow:
+
 Developer Push  
 → GitHub Actions  
-→ Terraform Provisioning  
-→ Docker Build  
-→ Docker Hub Push  
-→ EC2 Auto Deployment  
+→ Terraform Apply  
+→ EC2 Recreation  
+→ Docker Auto Deployment  
 → CloudWatch Monitoring
 
-### Architecture Components
-- **Developer Push**: Code updates are pushed to the main branch.
-- **GitHub Actions**: Executes CI/CD automation for build and deployment.
-- **Terraform Provisioning**: Creates/updates AWS networking, EC2, and monitoring  resources.
-- **Docker Build**: Packages the Node.js app into a portable container image.
-- **Docker Hub Push**: Stores versioned container images in a registry.
-- **EC2 Auto Deployment**: Pulls and runs the latest image on an EC2 host.
-- **CloudWatch Monitoring**: Tracks infrastructure and host-level health metrics.
+Beginner-friendly meaning:
+- **Developer Push**: source code or Terraform changes are pushed to GitHub.
+- **GitHub Actions**: CI runs checks and can trigger Terraform workflow.
+- **Terraform Apply**: AWS infrastructure is created/updated from code.
+- **EC2 Recreation**: instance can be replaced when bootstrap config changes (immutable style).
+- **Docker Auto Deployment**: new EC2 bootstraps itself and starts the app container.
+- **CloudWatch Monitoring**: CPU metrics and alarms help observe runtime health.
 
-## Deployment Workflow
-1. Developer pushes code to `main`.
-2. GitHub Actions pipeline starts automatically.
-3. Docker image is built from `app/Dockerfile`.
-4. Image is pushed to Docker Hub.
-5. Terraform provisions or updates AWS infrastructure.
-6. EC2 user data pulls the latest image and starts the container.
-7. CloudWatch alarms monitor system behavior (for example, CPU thresholds).
+## What Terraform Provisions
+Terraform in `terraform/` creates:
+- VPC
+- public subnet
+- internet gateway
+- route table and association
+- security group
+- EC2 instance
+- CloudWatch CPU alarm
 
-## CI/CD Workflow
-The workflow file `.github/workflows/deploy.yml` is structured to:
-1. check out source code,
-2. install application dependencies,
-3. build and push Docker image,
-4. initialize and validate Terraform,
-5. apply Terraform to deploy infrastructure and release the app.
+## AWS Free Tier Design Choices
+- **Instance type**: `t2.micro` (default in variables)
+- **OS image**: latest Ubuntu 22.04 LTS AMI from Canonical
+- **Network**: single public subnet for simple learning and easy access
 
-## Technologies Used
-- **Node.js + Express** for the sample application
-- **Docker** for containerization
-- **Terraform** for Infrastructure as Code
-- **AWS (VPC, EC2, Security Groups, CloudWatch)** for runtime environment
-- **GitHub Actions** for CI/CD automation
-- **Docker Hub** for image registry
+## Security Group Rules
+The EC2 security group allows:
+- TCP `22` (SSH)
+- TCP `80` (HTTP)
+- TCP `3000` (application port)
+
+## EC2 Bootstrapping Explanation
+On first boot, EC2 uses `user_data` to:
+1. install Docker (`docker.io`)
+2. enable and start Docker service
+3. pull image `260104/mini-idp-app:latest` from Docker Hub
+4. run container on `3000:3000`
+5. enable container auto-restart with `--restart unless-stopped`
+
+This gives automatic application deployment immediately after provisioning.
+
+## Immutable Infrastructure Explanation
+The EC2 resource is configured with `user_data_replace_on_change = true`.
+That means when bootstrap logic changes (for example image/tag updates passed via Terraform), Terraform recreates the EC2 instance instead of manually patching an existing server. This is a core immutable infrastructure pattern.
+
+In CI/CD, immutable behavior is strengthened with `terraform taint aws_instance.app_server` (when an instance already exists in state), which forces replacement so old EC2 is destroyed and a fresh EC2 is created.
+
+## Docker Auto Deployment Workflow
+1. Build/push Docker image to Docker Hub.
+2. Run `terraform apply` with the target image tag.
+3. Terraform creates or recreates EC2.
+4. EC2 pulls the configured image and starts container automatically.
+
+In CI/CD mode, these steps are fully automated by GitHub Actions.
+
+## CloudWatch Monitoring Explanation
+CloudWatch monitoring support is enabled at EC2 level (`monitoring = true`) and includes:
+- CPU utilization alarm (`> 70%` average over evaluation window)
+
+This gives a simple first step toward production-style observability.
+
+## Terraform Workflow Commands
+Run from the `terraform` directory:
+
+```bash
+terraform init
+terraform validate
+terraform plan
+terraform apply
+```
+
+## Terraform Workflow (Local + CI)
+1. Update Terraform code in `terraform/`.
+2. Run `terraform validate` and `terraform plan` locally.
+3. Commit and push changes to GitHub.
+4. GitHub Actions executes Terraform workflow.
+5. `terraform apply` reconciles infrastructure state in AWS.
+6. If EC2 is recreated, `user_data` re-installs Docker and redeploys app automatically.
+
+## Application Access Outputs
+After `terraform apply`, Terraform outputs:
+- EC2 public IP
+- application URL (port 3000)
+
+## Variables You Can Customize
+Important defaults:
+- `aws_region` (AWS region)
+- `instance_type` = `t2.micro`
+- `docker_image` = `260104/mini-idp-app:latest`
+
+## Screenshot Placeholders
+Add screenshots here after a successful CI/CD run:
+
+### 1) Successful GitHub Actions Workflow
+Placeholder path: `docs/screenshots/github-actions-success.png`  
+What to capture: all 10 stages green in `deploy.yml` run.
+
+### 2) Docker Push Logs
+Placeholder path: `docs/screenshots/docker-push-logs.png`  
+What to capture: Stage 5 logs showing `260104/mini-idp-app:latest` pushed.
+
+### 3) Terraform Apply Logs
+Placeholder path: `docs/screenshots/terraform-apply-logs.png`  
+What to capture: Stage 10 output showing apply completed successfully.
+
+### 4) EC2 Deployment
+Placeholder path: `docs/screenshots/ec2-deployment.png`  
+What to capture: AWS EC2 instance page with new instance and public IP.
+
+### 5) Deployed Application
+Placeholder path: `docs/screenshots/deployed-application.png`  
+What to capture: browser view of `http://<EC2_PUBLIC_IP>:3000`.
 
 ## Folder Structure
 ```text
 Capg-Capstone-Project-Mini-Internal-Developer-Platform/
-├── .github/
-│   └── workflows/
-│       └── deploy.yml
 ├── app/
 │   ├── Dockerfile
 │   ├── package.json
 │   └── server.js
-├── docs/
-│   └── README.md
-├── governance/
-│   └── README.md
-├── monitoring/
-│   └── README.md
 ├── terraform/
-│   ├── ec2.tf
-│   ├── main.tf
-│   ├── monitoring.tf
-│   ├── network.tf
-│   ├── outputs.tf
 │   ├── provider.tf
-│   └── variables.tf
-├── .gitignore
+│   ├── main.tf
+│   ├── network.tf
+│   ├── ec2.tf
+│   ├── monitoring.tf
+│   ├── variables.tf
+│   └── outputs.tf
 └── README.md
 ```
-
-## Getting Started
-1. Add required GitHub repository secrets:
-   - `DOCKERHUB_USERNAME`
-   - `DOCKERHUB_TOKEN`
-   - `AWS_ACCESS_KEY_ID`
-   - `AWS_SECRET_ACCESS_KEY`
-   - `AWS_REGION`
-   - `AMI_ID`
-2. Update Terraform variable defaults in `terraform/variables.tf` as needed.
-3. Push code to `main` to trigger the deployment pipeline.
-
-## Notes for Beginners
-- This project intentionally keeps modules simple and readable.
-- The structure can be extended later with environments (`dev/stage/prod`) and reusable Terraform modules.
-- Start with one reliable flow first, then scale complexity gradually.
