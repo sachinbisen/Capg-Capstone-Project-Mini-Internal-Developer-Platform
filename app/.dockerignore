@@ -1,0 +1,11 @@
+# Ignore local dependencies to reduce build context size.
+node_modules
+
+# Ignore local npm debug logs.
+npm-debug.log
+
+# Ignore repository metadata files inside Docker build context.
+.git
+
+# Ignore macOS Finder metadata files.
+.DS_Store

@@ -1,20 +1,32 @@
-# Use a slim official Node.js runtime image.
+# Lightweight Node.js base image (Alpine) for smaller and faster container builds.
 FROM node:20-alpine
 
-# Set a working directory inside the container filesystem.
+# Optional metadata label useful for container registries and governance.
+LABEL org.opencontainers.image.title="mini-idp-app"
+
+# Docker Hub naming convention placeholder:
+# <dockerhub-username>/mini-idp-app:<tag>
+# Example: yourusername/mini-idp-app:1.0.0
+
+# Set default runtime environment and default application port.
+# The app code still resolves port using process.env.PORT || 3000.
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Set working directory inside the container.
 WORKDIR /usr/src/app
 
-# Copy dependency metadata first to optimize Docker layer caching.
-COPY package.json ./
+# Copy package descriptor files first to optimize Docker layer cache reuse.
+COPY package*.json ./
 
-# Install production dependencies only for a lean image.
-RUN npm install --omit=dev
+# Install only production dependencies for a lean image.
+RUN npm ci --omit=dev
 
-# Copy application source code into the image.
-COPY server.js ./
+# Copy full application source after dependency installation.
+COPY . .
 
-# Expose the app port used by the Express server.
+# Expose the application port for local run and EC2 host port mapping.
 EXPOSE 3000
 
-# Start the application container process.
+# Start the Express application using package.json start script.
 CMD ["npm", "start"]
