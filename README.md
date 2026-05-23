@@ -180,6 +180,24 @@ In CI/CD mode, these steps are fully automated by GitHub Actions.
 ## CloudWatch Monitoring Explanation
 CloudWatch monitoring support is enabled at EC2 level (`monitoring = true`) and includes:
 - CPU utilization alarm (`> 70%` average over evaluation window)
+- EC2 status check alarm (alerts when instance health/status checks fail)
+
+What CloudWatch alarms are:
+- CloudWatch alarms watch metric thresholds and notify you when values indicate a problem.
+
+What EC2 status check monitoring means:
+- EC2 status checks validate both AWS host health and the instance operating system health.
+- A failed status check can indicate infrastructure or instance-level availability issues.
+
+What CloudWatch Dashboard is:
+- A CloudWatch Dashboard is a visual panel that combines key metrics in one place.
+- This project includes `mini-idp-dashboard` for quick operational visibility.
+
+Metrics monitored on the dashboard:
+- `CPUUtilization`
+- `NetworkIn`
+- `NetworkOut`
+- `StatusCheckFailed`
 
 This gives a simple first step toward production-style observability.
 
@@ -233,6 +251,14 @@ What to capture: running EC2 instance and public IP.
 ### 5) CloudWatch Alarms
 Placeholder path: `docs/screenshots/cloudwatch-alarms.png`  
 What to capture: high CPU alarm in CloudWatch.
+
+### 6) CloudWatch Dashboard
+Placeholder path: `docs/screenshots/cloudwatch-dashboard.png`  
+What to capture: `mini-idp-dashboard` with CPU, network, and status check widgets.
+
+### 7) EC2 Monitoring
+Placeholder path: `docs/screenshots/ec2-monitoring-metrics.png`  
+What to capture: EC2 metric graphs for CPU, NetworkIn, NetworkOut, and StatusCheckFailed.
 
 ## Folder Structure
 ```text
