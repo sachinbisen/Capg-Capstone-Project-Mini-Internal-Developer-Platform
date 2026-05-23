@@ -74,13 +74,13 @@ jobs:
         with:
           terraform_version: 1.9.8
 
-      # Stage 7: initialize Terraform in terraform folder.
+      # Stage 7: initialize Terraform in terraform folder with S3 remote backend.
       - name: Stage 7 - Terraform init
         working-directory: terraform
         run: |
           set -euo pipefail
-          echo "Initializing Terraform..."
-          terraform init -input=false
+          echo "Initializing Terraform with S3 remote state backend..."
+          terraform init -input=false -reconfigure
 
       # Stage 8: validate Terraform config and fail fast with clear logs if invalid.
       - name: Stage 8 - Terraform validate

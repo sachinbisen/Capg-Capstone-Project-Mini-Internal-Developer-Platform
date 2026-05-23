@@ -43,6 +43,66 @@ Configure these repository secrets before running the pipeline:
 
 These are consumed by the workflow so credentials are not hardcoded in code.
 
+## Terraform State Management (Module 6)
+Terraform state is a file that records what infrastructure Terraform has already created (for example VPC, subnet, EC2, alarms, and IDs).
+
+Without this state, Terraform cannot reliably compare:
+- **Current infrastructure in AWS**
+- **Desired infrastructure defined in code**
+
+### Local State vs Remote State
+- **Local state**: `terraform.tfstate` is stored only on the machine running Terraform.
+- **Remote state**: `terraform.tfstate` is stored in shared remote storage (S3 in this project).
+
+In CI/CD, remote state is safer and more stable because multiple workflow runs use one shared source of truth.
+
+### Why duplicate infrastructure happened earlier
+GitHub Actions runners are **ephemeral** (temporary).  
+Each run starts in a fresh environment, so local `terraform.tfstate` from old runs is not preserved.
+
+That made Terraform behave like a first-time deployment repeatedly, which can lead to:
+- duplicate resource creation attempts,
+- unstable apply behavior,
+- state drift and deployment confusion.
+
+### S3 backend fix used in this project
+Terraform now uses an S3 remote backend:
+- bucket: `sachin-mini-idp-terraform-state`
+- key: `mini-idp/terraform.tfstate`
+- region: `ap-south-1`
+- encryption: enabled (`encrypt = true`)
+
+This ensures every pipeline run reads and updates the same state file.
+
+### Why infrastructure tracking matters
+Accurate state tracking allows Terraform to:
+1. detect existing resources correctly,
+2. apply only required changes,
+3. avoid accidental duplication,
+4. keep CI/CD deployments deterministic.
+
+This is why remote state is an industry-standard Terraform practice for automated pipelines.
+
+## Terraform State Architecture
+State-aware deployment flow:
+
+Developer Push  
+→ GitHub Actions  
+→ Terraform Init  
+→ S3 Remote State  
+→ Terraform Apply  
+→ AWS Infrastructure
+
+## CI/CD State Persistence Explanation
+In this project:
+1. GitHub Actions starts a fresh runner.
+2. `terraform init` connects to S3 backend.
+3. Terraform downloads current state snapshot from S3.
+4. Terraform plans/applies against real tracked infrastructure.
+5. Updated state is saved back to S3 for the next run.
+
+This prevents state loss between runs and stabilizes Infrastructure as Code automation.
+
 ## Automated Deployment Explanation
 After each push to `main`, the workflow automatically:
 1. Builds and pushes the latest Docker image.
@@ -50,6 +110,7 @@ After each push to `main`, the workflow automatically:
 3. Recreates EC2 (immutable style when state has existing instance).
 4. Applies Terraform and provisions the updated infrastructure.
 5. Lets EC2 user-data pull and run `260104/mini-idp-app:latest`.
+6. Persists Terraform state in S3 so the next pipeline run continues from the latest known infrastructure state.
 
 If any stage fails, the workflow stops immediately and logs the failed step clearly.
 
@@ -153,26 +214,25 @@ Important defaults:
 
 ## Screenshot Placeholders
 Add screenshots here after a successful CI/CD run:
+### 1) S3 Bucket
+Placeholder path: `docs/screenshots/s3-backend-bucket.png`  
+What to capture: `sachin-mini-idp-terraform-state` bucket in AWS console.
 
-### 1) Successful GitHub Actions Workflow
+### 2) Terraform Backend Configuration
+Placeholder path: `docs/screenshots/terraform-backend-config.png`  
+What to capture: `terraform/backend.tf` showing S3 backend block.
+
+### 3) Successful GitHub Actions Run
 Placeholder path: `docs/screenshots/github-actions-success.png`  
-What to capture: all 10 stages green in `deploy.yml` run.
-
-### 2) Docker Push Logs
-Placeholder path: `docs/screenshots/docker-push-logs.png`  
-What to capture: Stage 5 logs showing `260104/mini-idp-app:latest` pushed.
-
-### 3) Terraform Apply Logs
-Placeholder path: `docs/screenshots/terraform-apply-logs.png`  
-What to capture: Stage 10 output showing apply completed successfully.
+What to capture: green run with successful Terraform init/validate/apply stages.
 
 ### 4) EC2 Deployment
 Placeholder path: `docs/screenshots/ec2-deployment.png`  
-What to capture: AWS EC2 instance page with new instance and public IP.
+What to capture: running EC2 instance and public IP.
 
-### 5) Deployed Application
-Placeholder path: `docs/screenshots/deployed-application.png`  
-What to capture: browser view of `http://<EC2_PUBLIC_IP>:3000`.
+### 5) CloudWatch Alarms
+Placeholder path: `docs/screenshots/cloudwatch-alarms.png`  
+What to capture: high CPU alarm in CloudWatch.
 
 ## Folder Structure
 ```text
@@ -182,6 +242,7 @@ Capg-Capstone-Project-Mini-Internal-Developer-Platform/
 │   ├── package.json
 │   └── server.js
 ├── terraform/
+│   ├── backend.tf
 │   ├── provider.tf
 │   ├── main.tf
 │   ├── network.tf
