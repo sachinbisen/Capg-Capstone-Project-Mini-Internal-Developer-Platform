@@ -1,2 +1,2 @@
 # Documentation Directory
-This folder is reserved for detailed technical documentation, onboarding guides, and architecture decision records.
+This folder contains the project documentation, developer onboarding guide, and architecture diagram for the Mini Internal Developer Platform (Mini IDP) project. The documents explain the platform workflow, CI/CD automation, Terraform infrastructure provisioning, Docker deployment, AWS monitoring setup, and overall cloud-native architecture implemented during the project.
