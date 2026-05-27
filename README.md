@@ -278,3 +278,5 @@ Capg-Capstone-Project-Mini-Internal-Developer-Platform/
 │   └── outputs.tf
 └── README.md
 ```
+## Architecture Diagram
+<img width="1411" height="721" alt="Architecture drawio" src="https://github.com/user-attachments/assets/79cac1bc-339d-46c1-93e2-d0e497d14fbd" />
